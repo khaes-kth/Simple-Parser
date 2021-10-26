@@ -47,7 +47,7 @@
                         <configuration>
                             <archive>
                                 <manifest>
-                                    <mainClass>se.wasp.parser.Main</mainClass>
+                                    <mainClass>se.wasp.Main</mainClass>
                                 </manifest>
                             </archive>
                             <descriptorRefs>

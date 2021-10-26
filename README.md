@@ -9,7 +9,7 @@ alias parser='java -jar /abs/path/to/parser.jar'
 ## How-to-Use
 ### How-to-Run
 ```
-parser --source /path/to/source/dir
+parser -s /path/to/source/dir
 ```
 ### Output Format
 ```
