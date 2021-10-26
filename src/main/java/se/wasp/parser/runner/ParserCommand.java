@@ -16,12 +16,17 @@ public class ParserCommand implements Callable<Integer> {
     @Option(names = {"-s", "--src-dir"}, description = "The path to the source directory to parse")
     private String srcPath;
 
+    @Option(names = {"-f", "--output-format"}, defaultValue = "table",
+            description = "The format of the output: table (default)/csv")
+    private String outputFormat;
+
     private final static Logger LOGGER = Logger.getLogger(ParserCommand.class.getName());
 
     @Override
     public Integer call() throws Exception {
         ParserLauncher parserLauncher = new ParserLauncher(srcPath);
-        parserLauncher.printModel(System.out);
+        parserLauncher.printModel(System.out, outputFormat.equals("csv") ? ParserLauncher.OutputType.CSV
+                : ParserLauncher.OutputType.TABLE);
         return 0;
     }
 

@@ -24,3 +24,7 @@ Extra_info is a list of pair of key-values separated by ";", such as:
 ```
 visibility=public;#containedType[name=MainTest]#constructor[signature=()]
 ```
+You can also get the output in CSV format:
+```
+parser -s /path/to/source/dir -f csv
+```
