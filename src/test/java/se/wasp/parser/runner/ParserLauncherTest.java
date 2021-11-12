@@ -16,7 +16,7 @@ public class ParserLauncherTest {
     public void test_visibilityIsNoted() throws IOException {
         File tmpFile = File.createTempFile("parser", "res");
         PrintStream ps = new PrintStream(tmpFile);
-        launcher.printModel(ps, ParserLauncher.OutputType.TABLE);
+        launcher.printModel(ps, ParserLauncher.OutputType.table);
         ps.close();
         String result = FileUtils.readFileToString(tmpFile, "UTF-8");
         assertTrue(result.contains("visibility"));

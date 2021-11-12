@@ -12,6 +12,7 @@ import spoon.reflect.declaration.ModifierKind;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -24,22 +25,25 @@ public class ParserLauncher {
     private static final String LOCATION = "{location}";
     private static final String FILE_PATH = "{filepath}";
     private static final String EXTRA_INFO = "{extra-info}";
+    private static final String VALUE = "{value}";
     private static final String PARENT_LOCATION = "{parent-location}";
     private static final String PARENT_ELEMENT_TYPE = "{parent-element-type}";
     private static final String ELEM_STR_TEMPLATE =
-            String.format("%s%s%s%s%s%s",
-                    ELEMENT_TYPE, LOCATION, PARENT_ELEMENT_TYPE, PARENT_LOCATION, FILE_PATH, EXTRA_INFO);
+            String.format("%s%s%s%s%s%s%s",
+                    ELEMENT_TYPE, LOCATION, PARENT_ELEMENT_TYPE, PARENT_LOCATION, VALUE, FILE_PATH, EXTRA_INFO);
     private static final String INFO_SEPARATOR = ";";
     private static final String[] OUTPUT_HEADERS = { "ELEMENT_TYPE", "LOCATION",
-            "PARENT_TYPE", "PARENT_LOCATION", "FILEPATH", "EXTRA_INFO" };
+            "PARENT_TYPE", "PARENT_LOCATION", "VALUE", "FILEPATH", "EXTRA_INFO" };
 
     private Launcher launcher = new Launcher();
     private CtModel model;
+    private String sourcePath;
 
     private final static Logger LOGGER = Logger.getLogger(ParserLauncher.class.getName());
 
     ParserLauncher(String path) {
         LOGGER.info(String.format("Processing %s", path));
+        this.sourcePath = path;
         launcher.getEnvironment().setCommentEnabled(true);
         launcher.addInputResource(path);
         launcher.buildModel();
@@ -51,10 +55,13 @@ public class ParserLauncher {
         model.processWith(elementInfoProcessor);
 
         switch (outputType){
-            case CSV:
+            case csv:
                 printOutputAsCSV(ps, elementInfoProcessor);
                 break;
-            case TABLE:
+            case csv2:
+                printOutputAsCommonCSV(ps, elementInfoProcessor);
+                break;
+            case table:
             default:
                 printOutputAsTable(ps, elementInfoProcessor);
                 break;
@@ -72,14 +79,46 @@ public class ParserLauncher {
                                 ? element.getPosition().getFile().getAbsolutePath() : "null";
 
                 printer.printRecord(element.getClass().getSimpleName(), getShortLocation(element), parentType,
-                        parentLocation, filePath, getExtraInfo(element));
+                        parentLocation, getElemValue(element), filePath, getExtraInfo(element));
+            }
+        }
+    }
+
+    private void printOutputAsCommonCSV(PrintStream ps, ElementInfoProcessor elementInfoProcessor) throws IOException {
+        try (CSVPrinter printer = new CSVPrinter(ps, CSVFormat.DEFAULT
+                .withHeader("NAME", "LINE_START", "LINE_END", "COLUMN_START", "COLUMN_END", "REL_PATH", "VALUE",
+                        "PARENT_LINE_START", "PARENT_LINE_END", "PARENT_COLUMN_START", "PARENT_COLUMN_END", "PARENT_NAME", "VISIBILITY"))) {
+            for (CtElement element : elementInfoProcessor.getAllElements()) {
+                CtElement parent = element.getParent();
+                String parentType = parent == null ? "null" : parent.getClass().getSimpleName(),
+                        parentLocation = element.getParent() == null ? "null" : getShortLocation(element.getParent()),
+                        filePath = element.getPosition().isValidPosition()
+                                ? element.getPosition().getFile().getAbsolutePath() : "null";
+
+                String relPath = filePath.equals("null") ? "null" : Path.of(sourcePath).toAbsolutePath().relativize(Path.of(filePath)).toString();
+
+                printer.printRecord(
+                        element.getClass().getSimpleName(),
+                        element.getPosition().isValidPosition() ? element.getPosition().getLine() + "" : "null",
+                        element.getPosition().isValidPosition() ? element.getPosition().getEndLine() + "" : "null",
+                        element.getPosition().isValidPosition() ? element.getPosition().getColumn() + "" : "null",
+                        element.getPosition().isValidPosition() ? element.getPosition().getEndColumn() + "" : "null",
+                        relPath,
+                        getElemValue(element),
+                        parent == null || parent.getPosition().isValidPosition() ? parent.getPosition().getLine() + "" : "null",
+                        parent == null || parent.getPosition().isValidPosition() ? parent.getPosition().getEndLine() + "" : "null",
+                        parent == null || parent.getPosition().isValidPosition() ? parent.getPosition().getColumn() + "" : "null",
+                        parent == null || parent.getPosition().isValidPosition() ? parent.getPosition().getEndColumn() + "" : "null",
+                        parentType,
+                        getVisibility(element) + ""
+                );
             }
         }
     }
 
     private void printOutputAsTable(PrintStream ps, ElementInfoProcessor elementInfoProcessor) {
-        ps.println(populateElemStrTemplate(OUTPUT_HEADERS[0], OUTPUT_HEADERS[1], OUTPUT_HEADERS[5], OUTPUT_HEADERS[2],
-                OUTPUT_HEADERS[3], OUTPUT_HEADERS[4]));
+        ps.println(populateElemStrTemplate(OUTPUT_HEADERS[0], OUTPUT_HEADERS[1], OUTPUT_HEADERS[6], OUTPUT_HEADERS[2],
+                OUTPUT_HEADERS[3], OUTPUT_HEADERS[5], OUTPUT_HEADERS[4]));
         elementInfoProcessor.getAllElements().forEach(element -> ps.println(getElemStr(element)));
     }
 
@@ -96,7 +135,8 @@ public class ParserLauncher {
                         getExtraInfo(element),
                         parentType,
                         parentLocation,
-                        filePath);
+                        filePath,
+                        getElemValue(element));
 
         return elemInfo;
     }
@@ -108,7 +148,8 @@ public class ParserLauncher {
                     String extraInfo,
                     String parentType,
                     String parentLocation,
-                    String filePath
+                    String filePath,
+                    String value
             ) {
         return ELEM_STR_TEMPLATE
                 .replace(ELEMENT_TYPE, String.format("%-30s", elementType))
@@ -116,7 +157,8 @@ public class ParserLauncher {
                 .replace(EXTRA_INFO, String.format("%-30s", extraInfo))
                 .replace(PARENT_ELEMENT_TYPE, String.format("%-30s", parentType))
                 .replace(PARENT_LOCATION, String.format("%-30s", parentLocation))
-                .replace(FILE_PATH, String.format("%-100s", filePath));
+                .replace(FILE_PATH, String.format("%-100s", filePath))
+                .replace(VALUE, String.format("%-100s", value));
     }
 
     private String getFormattedLocation(CtElement element) {
@@ -166,8 +208,30 @@ public class ParserLauncher {
         return extraInfoLst.stream().collect(Collectors.joining(INFO_SEPARATOR));
     }
 
+    private String getVisibility(CtElement element){
+        if (element instanceof CtModifiable) {
+            if (!element.getPath().toString().contains("subPackage[name=java]")) {
+                CtModifiable modifiable = (CtModifiable) element;
+                Set<ModifierKind> modifiers = modifiable.getModifiers();
+                if (modifiers.toString().contains("public"))
+                    return "public";
+                else if (modifiers.toString().contains("private"))
+                    return "private";
+                else if (modifiers.toString().contains("protected"))
+                    return "protected";
+            }
+        }
+        return null;
+    }
+
+    private String getElemValue(CtElement element){
+        return element.toString() == null ? "null" :
+                (element.toString().contains(System.lineSeparator()) ? "multi-line" : element.toString());
+    }
+
     public enum OutputType{
-        CSV,
-        TABLE
+        csv,
+        csv2,
+        table
     }
 }
